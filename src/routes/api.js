@@ -38,38 +38,31 @@ router.get(
       const query = { tenantId };
 
       if (statusFilter) {
-        // Apply status filter later in memory for simplicity
-        // (this keeps the query generic but may load more data than necessary)
+        query.status = statusFilter;
       }
 
       const skip = (page - 1) * limit;
 
-      // Fetch a page of submissions for this tenant
-      const submissions = await Submission.find(query)
+      const filteredSubmissions = await Submission.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
         .lean();
 
-      // Basic status filtering done in memory
-      const filteredSubmissions = statusFilter
-        ? submissions.filter((s) => s.status === statusFilter)
-        : submissions;
+      const assessmentIds = [...new Set(filteredSubmissions.map((s) => s.assessmentId.toString()))];
+      const assessments = await Assessment.find({ _id: { $in: assessmentIds } }).lean();
+      const assessmentMap = new Map(assessments.map((a) => [a._id.toString(), a]));
 
-      // For each submission, fetch the related assessment separately
-      // (simple but can lead to multiple queries per request)
-      const detailedSubmissions = [];
-      for (const sub of filteredSubmissions) {
-        const assessment = await Assessment.findById(sub.assessmentId).lean();
-        detailedSubmissions.push({
+      const detailedSubmissions = filteredSubmissions.map((sub) => {
+        const assessment = assessmentMap.get(sub.assessmentId.toString());
+        return {
           ...sub,
           assessmentTitle: assessment ? assessment.title : null,
           assessmentCategory: assessment ? assessment.category : null,
-        });
-      }
+        };
+      });
 
-      // Count total submissions for pagination metadata
-      const totalCount = await Submission.countDocuments({ tenantId });
+      const totalCount = await Submission.countDocuments(query);
 
       res.json({
         tenant: {
@@ -105,24 +98,25 @@ router.get(
         return res.status(404).json({ error: 'Tenant not found' });
       }
 
-      // Load all submissions for this tenant and compute summary in memory
-      // This is straightforward but can become expensive for large tenants.
-      const submissions = await Submission.find({ tenantId }).lean();
+      const [summary] = await Submission.aggregate([
+        { $match: { tenantId } },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: 1 },
+            passed: { $sum: { $cond: [{ $eq: ['$status', 'passed'] }, 1, 0] } },
+            failed: { $sum: { $cond: [{ $eq: ['$status', 'failed'] }, 1, 0] } },
+            inProgress: { $sum: { $cond: [{ $eq: ['$status', 'in-progress'] }, 1, 0] } },
+            totalScore: { $sum: '$score' },
+          },
+        },
+      ]);
 
-      let total = submissions.length;
-      let passed = 0;
-      let failed = 0;
-      let inProgress = 0;
-      let totalScore = 0;
-
-      for (const sub of submissions) {
-        if (sub.status === 'passed') passed += 1;
-        if (sub.status === 'failed') failed += 1;
-        if (sub.status === 'in-progress') inProgress += 1;
-        totalScore += sub.score;
-      }
-
-      const avgScore = total > 0 ? totalScore / total : 0;
+      const total = summary ? summary.total : 0;
+      const passed = summary ? summary.passed : 0;
+      const failed = summary ? summary.failed : 0;
+      const inProgress = summary ? summary.inProgress : 0;
+      const avgScore = total > 0 ? summary.totalScore / total : 0;
 
       res.json({
         tenant: {
@@ -134,7 +128,7 @@ router.get(
           passed,
           failed,
           inProgress,
-          averageScore: avgScore,
+          averageScore: parseFloat(avgScore.toFixed(2)),
         },
       });
     } catch (err) {

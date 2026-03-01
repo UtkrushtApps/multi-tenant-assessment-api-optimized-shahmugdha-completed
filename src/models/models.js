@@ -48,8 +48,7 @@ const SubmissionSchema = new mongoose.Schema(
   { timestamps: false }
 );
 
-// Note: indexes are intentionally minimal here to keep schema definition straightforward.
-// The application logic may rely heavily on certain fields for filtering/sorting.
+SubmissionSchema.index({ tenantId: 1, createdAt: -1 });
 
 const Tenant = mongoose.model('Tenant', TenantSchema);
 const Assessment = mongoose.model('Assessment', AssessmentSchema);
