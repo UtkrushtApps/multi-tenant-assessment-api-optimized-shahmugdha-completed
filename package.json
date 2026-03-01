@@ -1,0 +1,19 @@
+{
+  "name": "utkrusht-multitenant-optimization-task",
+  "version": "1.0.0",
+  "description": "Intermediate-level Node.js + MongoDB optimization task for a multi-tenant assessment API",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "mongoose": "^8.3.1",
+    "morgan": "^1.10.0",
+    "joi": "^17.13.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}

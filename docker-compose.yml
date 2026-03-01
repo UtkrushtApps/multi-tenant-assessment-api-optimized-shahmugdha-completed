@@ -1,0 +1,19 @@
+services:
+  mongo:
+    image: mongo
+    container_name: utkrusht-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - /root/task/data/mongo:/data/db
+      - /root/task/seed_database.js:/docker-entrypoint-initdb.d/seed_database.js:ro
+
+  api:
+    build:
+      context: /root/task
+    container_name: utkrusht-api
+    depends_on:
+      - mongo
+    ports:
+      - "3000:3000"
+    working_dir: /root/task
